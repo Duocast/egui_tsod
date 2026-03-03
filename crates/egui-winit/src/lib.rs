@@ -2072,7 +2072,6 @@ pub fn short_device_event_description(event: &winit::event::DeviceEvent) -> &'st
         DeviceEvent::MouseWheel { .. } => "DeviceEvent::MouseWheel",
         DeviceEvent::Button { .. } => "DeviceEvent::Button",
         DeviceEvent::Key { .. } => "DeviceEvent::Key",
-        _ => "DeviceEvent::Unknown",
     }
 }
 
@@ -2109,6 +2108,5 @@ pub fn short_window_event_description(event: &winit::event::WindowEvent) -> &'st
         WindowEvent::ThemeChanged { .. } => "WindowEvent::ThemeChanged",
         WindowEvent::Occluded { .. } => "WindowEvent::Occluded",
         WindowEvent::PanGesture { .. } => "WindowEvent::PanGesture",
-        _ => "WindowEvent::Unknown",
     }
 }
