@@ -259,6 +259,25 @@ impl State {
         self.egui_input.take()
     }
 
+    fn set_hovered_files_from_paths(&mut self, paths: &[std::path::PathBuf]) {
+        self.egui_input.hovered_files.clear();
+        self.egui_input
+            .hovered_files
+            .extend(paths.iter().cloned().map(|path| egui::HoveredFile {
+                path: Some(path),
+                ..Default::default()
+            }));
+    }
+    
+    fn push_dropped_files_from_paths(&mut self, paths: &[std::path::PathBuf]) {
+        self.egui_input
+            .dropped_files
+            .extend(paths.iter().cloned().map(|path| egui::DroppedFile {
+                path: Some(path),
+                ..Default::default()
+            }));
+    }
+    
     /// Call this when there is a new event.
     ///
     /// The result can be found in [`Self::egui_input`] and be extracted with [`Self::take_egui_input`].
