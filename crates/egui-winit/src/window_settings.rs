@@ -95,7 +95,8 @@ impl WindowSettings {
             // Mac sometimes has problems restoring the window to secondary monitors
             // using only `WindowBuilder::with_position`, so we need this extra step:
             if let Some(pos) = self.outer_position_pixels {
-                window.set_outer_position(winit::dpi::PhysicalPosition { x: pos.x, y: pos.y });
+                window
+                    .set_outer_position(winit::dpi::PhysicalPosition { x: pos.x, y: pos.y }.into());
             }
         }
     }
@@ -147,7 +148,7 @@ fn monitor_position(monitor: &winit::monitor::MonitorHandle) -> winit::dpi::Phys
         .position()
         .unwrap_or(winit::dpi::PhysicalPosition { x: 0, y: 0 })
 }
- 
+
 /// Helper to get size from a monitor via current video mode in winit 0.31.
 fn monitor_size(monitor: &winit::monitor::MonitorHandle) -> winit::dpi::PhysicalSize<u32> {
     monitor
@@ -180,10 +181,8 @@ fn find_active_monitor(
         let window_size_px = window_size_pts * (egui_zoom_factor * monitor.scale_factor() as f32);
         let pos = monitor_position(&monitor);
         let size = monitor_size(&monitor);
-        let monitor_x_range =
-            (pos.x - window_size_px.x as i32)..(pos.x + size.width as i32);
-        let monitor_y_range =
-            (pos.y - window_size_px.y as i32)..(pos.y + size.height as i32);
+        let monitor_x_range = (pos.x - window_size_px.x as i32)..(pos.x + size.width as i32);
+        let monitor_y_range = (pos.y - window_size_px.y as i32)..(pos.y + size.height as i32);
 
         if monitor_x_range.contains(&(position_px.x as i32))
             && monitor_y_range.contains(&(position_px.y as i32))
@@ -228,5 +227,5 @@ fn clamp_pos_to_monitors(
     // To get the maximum position, we get the rightmost corner of the display, then
     // subtract the size of the window to get the bottom right most value window.position
     // can have.
-    *position_px = position_
+    *position_px = position_px.clamp(monitor_pos, monitor_pos + window_size)
 }
