@@ -412,29 +412,54 @@ impl State {
                     consumed: false,
                 }
             }
-            WindowEvent::HoveredFile(path) => {
-                self.egui_input.hovered_files.push(egui::HoveredFile {
-                    path: Some(path.clone()),
-                    ..Default::default()
-                });
+            WindowEvent::DragEntered { paths, position } => {
+                // winit 0.31 includes pointer position for DnD; update egui's pointer pos.
+                self.on_cursor_moved(window, *position);
+            
+                self.egui_input.hovered_files.clear();
+                self.egui_input
+                    .hovered_files
+                    .extend(paths.iter().cloned().map(|path| egui::HoveredFile {
+                        path: Some(path),
+                        ..Default::default()
+                    }));
+            
+                EventResponse {
+                    repaint: true,
+                    consumed: self.egui_ctx.egui_is_using_pointer(),
+                }
+            }
+            
+            WindowEvent::DragMoved { position } => {
+                // CursorMoved/PointerMoved often doesn't fire during OS file drags; use DragMoved instead.
+                self.on_cursor_moved(window, *position);
+            
+                EventResponse {
+                    repaint: true,
+                    consumed: self.egui_ctx.egui_is_using_pointer(),
+                }
+            }
+            
+            WindowEvent::DragLeft { .. } => {
+                self.egui_input.hovered_files.clear();
+            
                 EventResponse {
                     repaint: true,
                     consumed: false,
                 }
             }
-            WindowEvent::HoveredFileCancelled => {
+            
+            WindowEvent::DragDropped { paths, position } => {
+                self.on_cursor_moved(window, *position);
+            
                 self.egui_input.hovered_files.clear();
-                EventResponse {
-                    repaint: true,
-                    consumed: false,
-                }
-            }
-            WindowEvent::DroppedFile(path) => {
-                self.egui_input.hovered_files.clear();
-                self.egui_input.dropped_files.push(egui::DroppedFile {
-                    path: Some(path.clone()),
-                    ..Default::default()
-                });
+                self.egui_input
+                    .dropped_files
+                    .extend(paths.iter().cloned().map(|path| egui::DroppedFile {
+                        path: Some(path),
+                        ..Default::default()
+                    }));
+            
                 EventResponse {
                     repaint: true,
                     consumed: false,
