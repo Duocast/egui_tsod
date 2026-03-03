@@ -8,7 +8,7 @@ use winit::{
 
 use ahash::HashMap;
 
-use super::winit_integration::{UserEvent, WinitApp};
+use super::winit_integration::WinitApp;
 use crate::{
     Result, epi,
     native::{event_loop_context, winit_integration::EventResult},
@@ -232,7 +232,7 @@ impl<T: WinitApp> ApplicationHandler for WinitAppWrapper<T> {
     fn device_event(
         &mut self,
         event_loop: &dyn ActiveEventLoop,
-        device_id: winit::event::DeviceId,
+        device_id: Option<winit::event::DeviceId>,
         event: winit::event::DeviceEvent,
     ) {
         profiling::function_scope!(egui_winit::short_device_event_description(&event));
@@ -288,14 +288,15 @@ fn run_and_return(event_loop: &mut EventLoop, winit_app: impl WinitApp) -> Resul
     app.return_result
 }
 
-fn run_and_exit(event_loop: EventLoop, winit_app: impl WinitApp) -> Result {
-    log::trace!("Entering the winit event loop (run_app)…");
+fn run_and_exit(mut event_loop: EventLoop, winit_app: impl WinitApp) -> Result {
+    use winit::event_loop::run_on_demand::EventLoopExtRunOnDemand as _;
 
-    // When to repaint what window
+    log::trace!("Entering the winit event loop (run_app_on_demand)…");
+
     let mut app = WinitAppWrapper::new(winit_app, false);
-    event_loop.run_app(&mut app)?;
+    event_loop.run_app_on_demand(&mut app)?;
 
-    log::debug!("winit event loop unexpectedly returned");
+    log::debug!("eframe window closed");
     Ok(())
 }
 
@@ -407,7 +408,7 @@ impl ApplicationHandler for EframeWinitApplication<'_> {
     fn device_event(
         &mut self,
         event_loop: &dyn ActiveEventLoop,
-        device_id: winit::event::DeviceId,
+        device_id: Option<winit::event::DeviceId>,
         event: winit::event::DeviceEvent,
     ) {
         self.wrapper.device_event(event_loop, device_id, event);
@@ -458,7 +459,7 @@ impl<'a> EframeWinitApplication<'a> {
     ) -> EframePumpStatus {
         use winit::event_loop::pump_events::{EventLoopExtPumpEvents as _, PumpStatus};
 
-        match event_loop.pump_app_events(timeout, self) {
+        match event_loop.pump_app_events(timeout, &mut *self) {
             PumpStatus::Continue => EframePumpStatus::Continue(self.control_flow),
             PumpStatus::Exit(code) => EframePumpStatus::Exit(code),
         }

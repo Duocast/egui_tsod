@@ -39,7 +39,7 @@ use crate::{
 
 use super::{
     epi_integration, event_loop_context,
-    winit_integration::{EventResult, UserEvent, WinitApp, create_egui_context},
+    winit_integration::{EventResult, WinitApp, create_egui_context},
 };
 
 // ----------------------------------------------------------------------------
@@ -250,16 +250,7 @@ impl<'app> GlowWinitApp<'app> {
                 .egui_ctx
                 .set_request_repaint_callback(move |info| {
                     log::trace!("request_repaint_callback: {info:?}");
-                    let when = Instant::now() + info.delay;
-                    let cumulative_pass_nr = info.current_cumulative_pass_nr;
-                    event_loop_proxy
-                        .lock()
-                        .send_event(UserEvent::RequestRepaint {
-                            viewport_id: info.viewport_id,
-                            when,
-                            cumulative_pass_nr,
-                        })
-                        .ok();
+                    event_loop_proxy.lock().wake_up();
                 });
         }
 
@@ -438,10 +429,10 @@ impl WinitApp for GlowWinitApp<'_> {
     fn device_event(
         &mut self,
         _: &dyn ActiveEventLoop,
-        _: winit::event::DeviceId,
+        _: Option<winit::event::DeviceId>,
         event: winit::event::DeviceEvent,
     ) -> crate::Result<EventResult> {
-        if let winit::event::DeviceEvent::MouseMotion { delta } = event
+        if let winit::event::DeviceEvent::PointerMotion { delta } = event
             && let Some(running) = &mut self.running
         {
             let mut glutin = running.glutin.borrow_mut();
@@ -561,7 +552,7 @@ impl GlowWinitRunning<'_> {
             let Some(egui_winit) = viewport.egui_winit.as_mut() else {
                 return Ok(EventResult::Wait);
             };
-            let mut raw_input = egui_winit.take_egui_input(window);
+            let mut raw_input = egui_winit.take_egui_input(window.as_ref());
             let viewport_ui_cb = viewport.viewport_ui_cb.clone();
 
             self.integration.pre_update();
@@ -607,7 +598,7 @@ impl GlowWinitRunning<'_> {
                 return Ok(EventResult::Wait);
             };
 
-            let screen_size_in_pixels: [u32; 2] = window.inner_size().into();
+            let screen_size_in_pixels: [u32; 2] = window.surface_size().into();
 
             {
                 frame_timer.pause();
@@ -682,7 +673,7 @@ impl GlowWinitRunning<'_> {
                 frame_timer.resume();
             }
 
-            let screen_size_in_pixels: [u32; 2] = window.inner_size().into();
+            let screen_size_in_pixels: [u32; 2] = window.surface_size().into();
 
             if !clear_before_update {
                 painter.clear(screen_size_in_pixels, clear_color);
@@ -816,7 +807,7 @@ impl GlowWinitRunning<'_> {
                 glutin.focused_viewport = focused.then_some(viewport_id).flatten();
             }
 
-            winit::event::WindowEvent::Resized(physical_size) => {
+            winit::event::WindowEvent::SurfaceResized(physical_size) => {
                 // Resize with 0 width and height is used by winit to signal a minimize event on Windows.
                 // See: https://github.com/rust-windowing/winit/issues/208
                 // This solves an issue where the app would panic when minimizing on Windows.
@@ -1098,7 +1089,7 @@ impl GlutinWindowContext {
                 actions_requested: Default::default(),
                 viewport_ui_cb: None,
                 gl_surface: None,
-                window: window.map(Arc::new),
+                window: window.map(Arc::<dyn Window>::from),
                 egui_winit: None,
             },
         );
@@ -1177,7 +1168,7 @@ impl GlutinWindowContext {
             );
 
             egui_winit::update_viewport_info(&mut viewport.info, &self.egui_ctx, &window, true);
-            viewport.window.insert(Arc::new(window))
+            viewport.window.insert(Arc::<dyn Window>::from(window))
         };
 
         viewport.egui_winit.get_or_insert_with(|| {
@@ -1196,7 +1187,7 @@ impl GlutinWindowContext {
             log::debug!("Creating a gl_surface for viewport {viewport_id:?}");
 
             // surface attributes
-            let (width_px, height_px): (u32, u32) = window.inner_size().into();
+            let (width_px, height_px): (u32, u32) = window.surface_size().into();
             let width_px = NonZeroU32::new(width_px).unwrap_or(NonZeroU32::MIN);
             let height_px = NonZeroU32::new(height_px).unwrap_or(NonZeroU32::MIN);
             let surface_attributes = {
@@ -1354,7 +1345,7 @@ impl GlutinWindowContext {
             );
 
             if let Some(window) = &viewport.window {
-                let old_inner_size = window.inner_size();
+                let old_inner_size = window.surface_size();
 
                 viewport.deferred_commands.append(&mut commands);
 
@@ -1368,7 +1359,7 @@ impl GlutinWindowContext {
 
                 // For Wayland : https://github.com/emilk/egui/issues/4196
                 if cfg!(target_os = "linux") {
-                    let new_inner_size = window.inner_size();
+                    let new_inner_size = window.surface_size();
                     if new_inner_size != old_inner_size {
                         self.resize(viewport_id, new_inner_size);
                     }
@@ -1498,9 +1489,9 @@ fn render_immediate_viewport(
         let (Some(egui_winit), Some(window)) = (&mut viewport.egui_winit, &viewport.window) else {
             return;
         };
-        egui_winit::update_viewport_info(&mut viewport.info, egui_ctx, window, false);
+        egui_winit::update_viewport_info(&mut viewport.info, egui_ctx, window.as_ref(), false);
 
-        let mut raw_input = egui_winit.take_egui_input(window);
+        let mut raw_input = egui_winit.take_egui_input(window.as_ref());
         raw_input.viewports = glutin
             .viewports
             .iter()
@@ -1551,7 +1542,7 @@ fn render_immediate_viewport(
         return;
     };
 
-    let screen_size_in_pixels: [u32; 2] = window.inner_size().into();
+    let screen_size_in_pixels: [u32; 2] = window.surface_size().into();
 
     change_gl_context(current_gl_context, not_current_gl_context, gl_surface);
 
@@ -1585,7 +1576,7 @@ fn render_immediate_viewport(
         }
     }
 
-    egui_winit.handle_platform_output(window, platform_output);
+    egui_winit.handle_platform_output(window.as_ref(), platform_output);
 
     event_loop_context::with_current_event_loop(|event_loop| {
         glutin.handle_viewport_output(event_loop, egui_ctx, &viewport_output);

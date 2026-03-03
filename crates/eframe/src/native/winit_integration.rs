@@ -39,32 +39,10 @@ pub fn create_egui_context(storage: Option<&dyn crate::Storage>) -> egui::Contex
     egui_ctx
 }
 
-/// The custom even `eframe` uses with the [`winit`] event loop.
-#[derive(Debug)]
-pub enum UserEvent {
-    /// A repaint is requested.
-    RequestRepaint {
-        /// What to repaint.
-        viewport_id: ViewportId,
-
-        /// When to repaint.
-        when: Instant,
-
-        /// What the cumulative pass number was when the repaint was _requested_.
-        cumulative_pass_nr: u64,
-    },
-
-    /// A request related to [`accesskit`](https://accesskit.dev/).
-    #[cfg(feature = "accesskit")]
-    AccessKitActionRequest(accesskit_winit::Event),
-}
-
-#[cfg(feature = "accesskit")]
-impl From<accesskit_winit::Event> for UserEvent {
-    fn from(inner: accesskit_winit::Event) -> Self {
-        Self::AccessKitActionRequest(inner)
-    }
-}
+/// Compatibility placeholder for older eframe APIs.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum UserEvent {}
 
 pub trait WinitApp {
     fn egui_ctx(&self) -> Option<&egui::Context>;
@@ -90,7 +68,7 @@ pub trait WinitApp {
     fn device_event(
         &mut self,
         event_loop: &dyn ActiveEventLoop,
-        device_id: winit::event::DeviceId,
+        device_id: Option<winit::event::DeviceId>,
         event: winit::event::DeviceEvent,
     ) -> crate::Result<EventResult>;
 
