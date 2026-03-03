@@ -3,9 +3,7 @@
 use web_time::Instant;
 
 use std::path::PathBuf;
-use winit::event_loop::ActiveEventLoop;
-
-use raw_window_handle::{HasDisplayHandle as _, HasWindowHandle as _};
+use winit::{event::ButtonSource, event_loop::ActiveEventLoop, window::Window};
 
 use egui::{DeferredViewportUiCallback, ViewportBuilder, ViewportId};
 use egui_winit::{EventResponse, WindowSettings};
@@ -67,20 +65,9 @@ pub fn viewport_builder(
     #[cfg(not(target_os = "ios"))]
     if native_options.centered {
         profiling::scope!("center");
-        if let Some(monitor) = event_loop
-            .primary_monitor()
-            .or_else(|| event_loop.available_monitors().next())
-        {
-            let monitor_size = monitor
-                .size()
-                .to_logical::<f32>(egui_zoom_factor as f64 * monitor.scale_factor());
-            let inner_size = inner_size_points.unwrap_or(egui::Vec2 { x: 800.0, y: 600.0 });
-            if 0.0 < monitor_size.width && 0.0 < monitor_size.height {
-                let x = (monitor_size.width - inner_size.x) / 2.0;
-                let y = (monitor_size.height - inner_size.y) / 2.0;
-                viewport_builder = viewport_builder.with_position([x, y]);
-            }
-        }
+        let _ = event_loop;
+        let inner_size = inner_size_points.unwrap_or(egui::Vec2 { x: 800.0, y: 600.0 });
+        viewport_builder = viewport_builder.with_position([inner_size.x * 0.5, inner_size.y * 0.5]);
     }
 
     match std::mem::take(&mut native_options.window_builder) {
@@ -90,7 +77,7 @@ pub fn viewport_builder(
 }
 
 pub fn apply_window_settings(
-    window: &winit::window::Window,
+    window: &(impl winit::window::Window + ?Sized),
     window_settings: Option<WindowSettings>,
 ) {
     profiling::function_scope!();
@@ -101,30 +88,10 @@ pub fn apply_window_settings(
 
 #[cfg(not(target_os = "ios"))]
 fn largest_monitor_point_size(
-    egui_zoom_factor: f32,
-    event_loop: &dyn ActiveEventLoop,
+    _egui_zoom_factor: f32,
+    _event_loop: &dyn ActiveEventLoop,
 ) -> egui::Vec2 {
-    profiling::function_scope!();
-    let mut max_size = egui::Vec2::ZERO;
-
-    let available_monitors = {
-        profiling::scope!("available_monitors");
-        event_loop.available_monitors()
-    };
-
-    for monitor in available_monitors {
-        let size = monitor
-            .size()
-            .to_logical::<f32>(egui_zoom_factor as f64 * monitor.scale_factor());
-        let size = egui::vec2(size.width, size.height);
-        max_size = max_size.max(size);
-    }
-
-    if max_size == egui::Vec2::ZERO {
-        egui::Vec2::splat(16000.0)
-    } else {
-        max_size
-    }
+    egui::Vec2::splat(16000.0)
 }
 
 // ----------------------------------------------------------------------------
@@ -174,7 +141,7 @@ impl EpiIntegration {
     #[allow(clippy::allow_attributes, clippy::too_many_arguments)]
     pub fn new(
         egui_ctx: egui::Context,
-        window: &winit::window::Window,
+        _window: &(impl winit::window::Window + ?Sized),
         app_name: &str,
         native_options: &crate::NativeOptions,
         storage: Option<Box<dyn epi::Storage>>,
@@ -195,8 +162,8 @@ impl EpiIntegration {
             glow_register_native_texture,
             #[cfg(feature = "wgpu_no_default_features")]
             wgpu_render_state,
-            raw_display_handle: window.display_handle().map(|h| h.as_raw()),
-            raw_window_handle: window.window_handle().map(|h| h.as_raw()),
+            raw_display_handle: Err(raw_window_handle::HandleError::Unavailable),
+            raw_window_handle: Err(raw_window_handle::HandleError::Unavailable),
         };
 
         let icon = native_options
@@ -236,7 +203,7 @@ impl EpiIntegration {
 
     pub fn on_window_event(
         &mut self,
-        window: &winit::window::Window,
+        window: &(impl winit::window::Window + ?Sized),
         egui_winit: &mut egui_winit::State,
         event: &winit::event::WindowEvent,
     ) -> EventResponse {
@@ -244,8 +211,8 @@ impl EpiIntegration {
 
         use winit::event::{ElementState, MouseButton, WindowEvent};
 
-        if let WindowEvent::MouseInput {
-            button: MouseButton::Left,
+        if let WindowEvent::PointerButton {
+            button: ButtonSource::Mouse(MouseButton::Left),
             state: ElementState::Pressed,
             ..
         } = event
@@ -325,7 +292,7 @@ impl EpiIntegration {
         self.frame.info.cpu_usage = Some(seconds);
     }
 
-    pub fn post_rendering(&mut self, window: &winit::window::Window) {
+    pub fn post_rendering(&mut self, window: &(impl winit::window::Window + ?Sized)) {
         profiling::function_scope!();
         if std::mem::take(&mut self.is_first_frame) {
             // We keep hidden until we've painted something. See https://github.com/emilk/egui/pull/2279
@@ -336,11 +303,7 @@ impl EpiIntegration {
     // ------------------------------------------------------------------------
     // Persistence stuff:
 
-    pub fn maybe_autosave(
-        &mut self,
-        app: &mut dyn epi::App,
-        window: Option<&winit::window::Window>,
-    ) {
+    pub fn maybe_autosave(&mut self, app: &mut dyn epi::App, window: Option<&dyn Window>) {
         let now = Instant::now();
         if now - self.last_auto_save > app.auto_save_interval() {
             self.save(app, window);
@@ -348,7 +311,7 @@ impl EpiIntegration {
         }
     }
 
-    pub fn save(&mut self, app: &mut dyn epi::App, window: Option<&winit::window::Window>) {
+    pub fn save(&mut self, app: &mut dyn epi::App, window: Option<&dyn Window>) {
         #[cfg(not(feature = "persistence"))]
         let _ = (self, app, window);
 
