@@ -11,7 +11,7 @@ use vello_cpu::{color, kurbo};
 
 use crate::{
     TextOptions, TextureAtlas,
-    text::        
+    text::{
         FontTweak, VariationCoords,
         fonts::{Blob, CachedFamily, FontFaceKey},
     },
